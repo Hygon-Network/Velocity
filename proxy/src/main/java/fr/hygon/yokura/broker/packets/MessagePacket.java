@@ -26,32 +26,32 @@ import io.netty.channel.ChannelHandlerContext;
 import java.nio.charset.StandardCharsets;
 
 public class MessagePacket implements Packet {
-    private final Message message;
+  private final Message message;
 
-    public MessagePacket() {
-        this.message = null;
-    }
+  public MessagePacket() {
+    this.message = null;
+  }
 
-    public MessagePacket(Message message) {
-        this.message = message;
-    }
+  public MessagePacket(Message message) {
+    this.message = message;
+  }
 
-    @Override
-    public void read(ChannelHandlerContext ctx, ByteBuf in) {
-        int channelLength = in.readInt();
-        String channel = (String) in.readCharSequence(channelLength, StandardCharsets.UTF_8);
+  @Override
+  public void read(ChannelHandlerContext ctx, ByteBuf in) {
+    int channelLength = in.readInt();
+    String channel = (String) in.readCharSequence(channelLength, StandardCharsets.UTF_8);
 
-        byte[] message = new byte[in.readableBytes()];
-        in.readBytes(message);
+    byte[] message = new byte[in.readableBytes()];
+    in.readBytes(message);
 
-        PubSubManager.handleMessage(channel, message);
-    }
+    PubSubManager.handleMessage(channel, message);
+  }
 
-    @Override
-    public void write(ByteBuf out) {
-        out.writeInt(message.getChannel().length());
-        out.writeCharSequence(message.getChannel(), StandardCharsets.UTF_8);
+  @Override
+  public void write(ByteBuf out) {
+    out.writeInt(message.getChannel().length());
+    out.writeCharSequence(message.getChannel(), StandardCharsets.UTF_8);
 
-        out.writeBytes(Unpooled.wrappedBuffer(message.getMessage()));
-    }
+    out.writeBytes(Unpooled.wrappedBuffer(message.getMessage()));
+  }
 }

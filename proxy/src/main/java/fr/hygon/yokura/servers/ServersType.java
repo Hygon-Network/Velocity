@@ -15,20 +15,36 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package fr.hygon.yokura.broker.packets;
+package fr.hygon.yokura.servers;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
+public enum ServersType {
+  HUB("hub", 2, 512, 512);
 
-public class RegisterClientPacket implements Packet {
-  @Override
-  public void read(ChannelHandlerContext ctx, ByteBuf in) { // The client won't receive this packet
+  private final String folder;
+  private final int maxAvailableServers;
+  private final int minRam; //In megabytes
+  private final int maxRam; //In megabytes
 
+  ServersType(String folder, int maxAvailableServers, int minRam, int maxRam) {
+    this.folder = folder;
+    this.maxAvailableServers = maxAvailableServers;
+    this.minRam = minRam;
+    this.maxRam = maxRam;
   }
 
-  @Override
-  public void write(ByteBuf out) {
-    out.writeInt(Packets.REGISTER_CLIENT_PACKET.getPacketId());
-    // The UUID has already been wrote before, so we don't need to rewrite it.
+  public String getFolder() {
+    return folder;
+  }
+
+  public int getMinAvailableServers() {
+    return maxAvailableServers;
+  }
+
+  public int getMinRam() {
+    return minRam;
+  }
+
+  public int getMaxRam() {
+    return maxRam;
   }
 }

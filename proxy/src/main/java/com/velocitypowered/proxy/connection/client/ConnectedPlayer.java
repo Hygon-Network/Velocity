@@ -723,28 +723,18 @@ public class ConnectedPlayer implements MinecraftConnectionAssociation, Player {
    * @return the next server to try
    */
   private Optional<RegisteredServer> getNextServerToTry(@Nullable RegisteredServer current) {
-    if (serversToTry == null) {
-      String virtualHostStr = getVirtualHost().map(InetSocketAddress::getHostString)
-          .orElse("")
-          .toLowerCase(Locale.ROOT);
-      serversToTry = server.getConfiguration().getForcedHosts().getOrDefault(virtualHostStr,
-          Collections.emptyList());
-    }
-
-    if (serversToTry.isEmpty()) {
-      List<String> connOrder = server.getConfiguration().getAttemptConnectionOrder();
-      if (connOrder.isEmpty()) {
-        return Optional.empty();
-      } else {
-        serversToTry = connOrder;
-      }
+    if (serversToTry == null || serversToTry.isEmpty()) {
+      serversToTry = server.getConfiguration().getAttemptConnectionOrder();
+    } else {
+      serversToTry.removeIf(servers -> !server.getConfiguration().getAttemptConnectionOrder()
+              .contains(servers));
     }
 
     for (int i = tryIndex; i < serversToTry.size(); i++) {
       String toTryName = serversToTry.get(i);
       if ((connectedServer != null && hasSameName(connectedServer.getServer(), toTryName))
-          || (connectionInFlight != null && hasSameName(connectionInFlight.getServer(), toTryName))
-          || (current != null && hasSameName(current, toTryName))) {
+              || (connectionInFlight != null && hasSameName(connectionInFlight.getServer(), toTryName))
+              || (current != null && hasSameName(current, toTryName))) {
         continue;
       }
 

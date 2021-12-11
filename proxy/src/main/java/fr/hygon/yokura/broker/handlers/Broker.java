@@ -31,104 +31,107 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+
 import java.net.InetSocketAddress;
 import java.util.UUID;
 
 public class Broker {
-    public static final UUID CLIENT_UUID = UUID.randomUUID();
+  public static final UUID CLIENT_UUID = UUID.randomUUID();
 
-    private final Object locker = new Object();
-    public boolean isConnected = false;
-    public boolean hasFinished = false;
+  private final Object locker = new Object();
+  public boolean isConnected = false;
+  public boolean hasFinished = false;
 
-    private static Channel brokerChannel = null;
+  private static Channel brokerChannel = null;
 
-    /**
-     * Connects the proxy to the broker server.
-     * @param host the broker host
-     * @param port the broker port
-     * @return true if the connection was successful, false if it wasn't
-     */
-    public boolean connect(String host, int port) {
-        Thread brokerThread = new Thread(() -> {
-            EventLoopGroup group = new NioEventLoopGroup();
-            try {
-                Bootstrap clientBootstrap = new Bootstrap();
+  /**
+   * Connects the proxy to the broker server.
+   *
+   * @param host the broker host
+   * @param port the broker port
+   * @return true if the connection was successful, false if it wasn't
+   */
+  public boolean connect(String host, int port) {
+    Thread brokerThread = new Thread(() -> {
+      EventLoopGroup group = new NioEventLoopGroup();
+      try {
+        Bootstrap clientBootstrap = new Bootstrap();
 
-                clientBootstrap.group(group);
-                clientBootstrap.channel(NioSocketChannel.class);
-                clientBootstrap.remoteAddress(new InetSocketAddress(host, port));
-                clientBootstrap.handler(new ChannelInitializer<SocketChannel>() {
-                    protected void initChannel(SocketChannel socketChannel) {
-                        socketChannel.pipeline().addLast(new ClientHandler());
-                    }
-                });
-                ChannelFuture channelFuture = clientBootstrap.connect();
-                channelFuture.addListener((ChannelFutureListener) future -> {
-                    if (future.isSuccess()) {
-                        brokerChannel = future.channel();
-                        sendPacket(new RegisterClientPacket());
-                        Thread.sleep(100); // Give some time for the packet to be received and treated
-                    }
-
-                    synchronized (locker) {
-                        isConnected = future.isSuccess();
-                        hasFinished = true;
-                        locker.notify();
-                    }
-                });
-                channelFuture.sync();
-                channelFuture.channel().closeFuture().sync();
-            } catch (InterruptedException exception) {
-                exception.printStackTrace();
-            } finally {
-                try {
-                    group.shutdownGracefully().sync();
-                } catch (InterruptedException exception) {
-                    exception.printStackTrace();
-                }
-            }
+        clientBootstrap.group(group);
+        clientBootstrap.channel(NioSocketChannel.class);
+        clientBootstrap.remoteAddress(new InetSocketAddress(host, port));
+        clientBootstrap.handler(new ChannelInitializer<SocketChannel>() {
+          protected void initChannel(SocketChannel socketChannel) {
+            socketChannel.pipeline().addLast(new ClientHandler());
+          }
         });
-        brokerThread.setName("Broker Thread");
-        brokerThread.start();
+        ChannelFuture channelFuture = clientBootstrap.connect();
+        channelFuture.addListener((ChannelFutureListener) future -> {
+          if (future.isSuccess()) {
+            brokerChannel = future.channel();
+            sendPacket(new RegisterClientPacket());
+            Thread.sleep(100); // Give some time for the packet to be received and treated
+          }
 
-        synchronized (locker) {
-            while (!hasFinished) {
-                try {
-                    locker.wait();
-                } catch (InterruptedException exception) {
-                    exception.printStackTrace();
-                }
-            }
+          synchronized (locker) {
+            isConnected = future.isSuccess();
+            hasFinished = true;
+            locker.notify();
+          }
+        });
+        channelFuture.sync();
+        channelFuture.channel().closeFuture().sync();
+      } catch (InterruptedException exception) {
+        exception.printStackTrace();
+      } finally {
+        try {
+          group.shutdownGracefully().sync();
+        } catch (InterruptedException exception) {
+          exception.printStackTrace();
         }
+      }
+    });
+    brokerThread.setName("Broker Thread");
+    brokerThread.start();
 
-        return isConnected;
+    synchronized (locker) {
+      while (!hasFinished) {
+        try {
+          locker.wait();
+        } catch (InterruptedException exception) {
+          exception.printStackTrace();
+        }
+      }
     }
 
-    /**
-     * Sends a packet to the broker.
-     * @param packet the packet
-     */
-    public static void sendPacket(Packet packet) {
-        ByteBuf byteBuf = Unpooled.buffer();
-        byteBuf.writeInt(Packets.getIdByPacket(packet));
+    return isConnected;
+  }
 
-        byteBuf.writeLong(CLIENT_UUID.getMostSignificantBits());
-        byteBuf.writeLong(CLIENT_UUID.getLeastSignificantBits());
+  /**
+   * Sends a packet to the broker.
+   *
+   * @param packet the packet
+   */
+  public static void sendPacket(Packet packet) {
+    ByteBuf byteBuf = Unpooled.buffer();
+    byteBuf.writeInt(Packets.getIdByPacket(packet));
 
-        packet.write(byteBuf);
-        writePacketSize(byteBuf);
-        brokerChannel.writeAndFlush(byteBuf);
-    }
+    byteBuf.writeLong(CLIENT_UUID.getMostSignificantBits());
+    byteBuf.writeLong(CLIENT_UUID.getLeastSignificantBits());
 
-    private static void writePacketSize(ByteBuf byteBuf) {
-        byte[] bytes = new byte[byteBuf.readableBytes()];
-        byteBuf.readBytes(bytes);
+    packet.write(byteBuf);
+    writePacketSize(byteBuf);
+    brokerChannel.writeAndFlush(byteBuf);
+  }
 
-        byteBuf.resetReaderIndex();
-        byteBuf.resetWriterIndex();
+  private static void writePacketSize(ByteBuf byteBuf) {
+    byte[] bytes = new byte[byteBuf.readableBytes()];
+    byteBuf.readBytes(bytes);
 
-        byteBuf.writeInt(bytes.length);
-        byteBuf.writeBytes(bytes);
-    }
+    byteBuf.resetReaderIndex();
+    byteBuf.resetWriterIndex();
+
+    byteBuf.writeInt(bytes.length);
+    byteBuf.writeBytes(bytes);
+  }
 }
