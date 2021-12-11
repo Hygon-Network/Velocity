@@ -142,3 +142,13 @@ map = "Velocity"
 
 # Whether plugins should be shown in query response by default or not
 show-plugins = false
+
+[yokura]
+# Yokura global's config file.
+global-config-file = "/opt/HygonNetwork/yokura-global.yml"
+
+# Folder containing the servers file.
+servers-folder = "/opt/HygonNetwork/servers"
+
+# Temporary folder that will contain the running servers.
+servers-temp-folder = "/opt/HygonNetwork/temp-servers"

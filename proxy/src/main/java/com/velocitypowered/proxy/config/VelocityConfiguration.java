@@ -31,6 +31,7 @@ import com.velocitypowered.proxy.util.AddressUtil;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -53,6 +54,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.yaml.snakeyaml.Yaml;
 
 public class VelocityConfiguration implements ProxyConfig {
 
@@ -75,21 +77,24 @@ public class VelocityConfiguration implements ProxyConfig {
   private final Metrics metrics;
   private net.kyori.adventure.text.@MonotonicNonNull Component motdAsComponent;
   private @Nullable Favicon favicon;
+  private final Yokura yokura;
 
   private VelocityConfiguration(Servers servers, ForcedHosts forcedHosts, Advanced advanced,
-      Query query, Metrics metrics) {
+      Query query, Metrics metrics, Yokura yokura) {
     this.servers = servers;
     this.forcedHosts = forcedHosts;
     this.advanced = advanced;
     this.query = query;
     this.metrics = metrics;
+    this.yokura = yokura;
   }
 
   private VelocityConfiguration(String bind, String motd, int showMaxPlayers, boolean onlineMode,
       boolean preventClientProxyConnections, boolean announceForge,
       PlayerInfoForwarding playerInfoForwardingMode, byte[] forwardingSecret,
       boolean onlineModeKickExistingPlayers, PingPassthroughMode pingPassthrough, Servers servers,
-      ForcedHosts forcedHosts, Advanced advanced, Query query, Metrics metrics) {
+      ForcedHosts forcedHosts, Advanced advanced, Query query, Metrics metrics,
+      Yokura yokura) {
     this.bind = bind;
     this.motd = motd;
     this.showMaxPlayers = showMaxPlayers;
@@ -105,6 +110,7 @@ public class VelocityConfiguration implements ProxyConfig {
     this.advanced = advanced;
     this.query = query;
     this.metrics = metrics;
+    this.yokura = yokura;
   }
 
   /**
@@ -371,6 +377,10 @@ public class VelocityConfiguration implements ProxyConfig {
     return advanced.isLogCommandExecutions();
   }
 
+  public Yokura getYokuraConfig() {
+    return yokura;
+  }
+
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
@@ -446,6 +456,7 @@ public class VelocityConfiguration implements ProxyConfig {
     CommentedConfig advancedConfig = config.get("advanced");
     CommentedConfig queryConfig = config.get("query");
     CommentedConfig metricsConfig = config.get("metrics");
+    CommentedConfig yokuraConfig = config.get("yokura");
     PlayerInfoForwarding forwardingMode = config.getEnumOrElse("player-info-forwarding-mode",
         PlayerInfoForwarding.NONE);
     PingPassthroughMode pingPassthroughMode = config.getEnumOrElse("ping-passthrough",
@@ -475,7 +486,8 @@ public class VelocityConfiguration implements ProxyConfig {
         new ForcedHosts(forcedHostsConfig),
         new Advanced(advancedConfig),
         new Query(queryConfig),
-        new Metrics(metricsConfig)
+        new Metrics(metricsConfig),
+        new Yokura(yokuraConfig)
     );
   }
 
@@ -787,6 +799,81 @@ public class VelocityConfiguration implements ProxyConfig {
 
     public boolean isEnabled() {
       return enabled;
+    }
+  }
+
+  public static class Yokura {
+    private Path serversFolder = Paths.get("/opt/HygonNetwork/servers");
+    private Path serversTempFolder = Paths.get("/opt/HygonNetwork/temp-servers");
+
+    private String mongoHost = "localhost";
+    private int mongoPort = 27017;
+    private String mongoUser = "HygonNetwork";
+    private char[] mongoPassword = new char[0];
+    private String mongoDatabase = "Hygon";
+
+    private String brokerHost = "localhost";
+    private int brokerPort = 9800;
+
+
+    private Yokura(CommentedConfig config) throws IOException {
+      if (config != null) {
+        File yokuraGlobalConfigFile = new File(config.getOrElse("global-config-file", "/opt/HygonNetwork/yokura-global.yml"));
+        this.serversFolder = Paths.get(config.getOrElse("servers-folder", "/opt/HygonNetwork/servers"));
+        this.serversTempFolder = Paths.get(config.getOrElse("servers-folder", "/opt/HygonNetwork/temp-servers"));
+
+        InputStream yokuraFileInputStream = new FileInputStream(yokuraGlobalConfigFile);
+        Yaml yaml = new Yaml();
+        Map<String, Object> yokuraConfig = yaml.load(yokuraFileInputStream);
+        yokuraFileInputStream.close();
+
+        Map<String, Object> mongodbInfos = (Map<String, Object>) ((Map<String, Object>) yokuraConfig.get("credentials")).get("mongodb");
+        this.mongoHost = (String) mongodbInfos.get("host");
+        this.mongoPort = (int) mongodbInfos.get("port");
+        this.mongoUser = (String) mongodbInfos.get("user");
+        this.mongoPassword = ((String) mongodbInfos.get("password")).toCharArray();
+        this.mongoDatabase = (String) mongodbInfos.get("database");
+
+        Map<String, Object> brokerInfos = (Map<String, Object>) ((Map<String, Object>) yokuraConfig.get("credentials")).get("broker");
+        this.brokerHost = (String) brokerInfos.get("host");
+        this.brokerPort = (int) brokerInfos.get("port");
+      }
+    }
+
+    public Path getServersFolder () {
+      return serversFolder;
+    }
+
+    public Path getServersTempFolder() {
+      return serversTempFolder;
+    }
+
+    public String getMongoHost() {
+      return mongoHost;
+    }
+
+    public int getMongoPort() {
+      return mongoPort;
+    }
+
+    public String getMongoUser() {
+      return mongoUser;
+    }
+
+    public char[] getMongoPassword() {
+      return mongoPassword;
+    }
+
+    public String getMongoDatabase() {
+      return mongoDatabase;
+    }
+
+    public String getBrokerHost() {
+      return brokerHost;
+    }
+
+    public int getBrokerPort() {
+      return brokerPort;
     }
   }
 }
