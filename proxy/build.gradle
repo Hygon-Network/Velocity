@@ -45,6 +45,7 @@ dependencies {
     implementation project(':velocity-api').sourceSets.ap.output
     implementation project(':velocity-native')
 
+    implementation "org.mongodb:mongo-java-driver:3.12.10"
     implementation "io.netty:netty-codec:${nettyVersion}"
     implementation "io.netty:netty-codec-haproxy:${nettyVersion}"
     implementation "io.netty:netty-codec-http:${nettyVersion}"

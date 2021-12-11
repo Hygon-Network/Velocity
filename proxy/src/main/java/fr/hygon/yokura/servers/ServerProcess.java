@@ -20,7 +20,6 @@ package fr.hygon.yokura.servers;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import com.velocitypowered.proxy.VelocityServer;
 import com.velocitypowered.proxy.config.VelocityConfiguration;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -33,6 +32,9 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import org.bson.BsonDocument;
+import org.bson.BsonString;
+import org.bson.Document;
 
 public class ServerProcess {
   private final VelocityServer velocityServer;
@@ -122,6 +124,16 @@ public class ServerProcess {
         return;
       }
 
+      Document serverDocument = new Document()
+          .append("_id", serverFullId)
+          .append("server_type", serverType.toString())
+          .append("status", Status.STARTING.toString())
+          .append("online_players", 0);
+
+      velocityServer.getMongoDatabase().getCollection("network")
+          .deleteOne(new BsonDocument("_id", new BsonString(serverFullId)));
+      velocityServer.getMongoDatabase().getCollection("network").insertOne(serverDocument);
+
       ServerManager.getLogger().info("Created a " + serverType
           + " server with ID " + serverFullId + ".");
 
@@ -162,6 +174,8 @@ public class ServerProcess {
 
   private void removeServerAndVerify() {
     velocityServer.getConfiguration().getAttemptConnectionOrder().remove(serverFullId);
+    velocityServer.getMongoDatabase().getCollection("network")
+        .deleteOne(new BsonDocument("_id", new BsonString(serverFullId)));
 
     if (!deleteDirectory(new File(yokuraConfig.getServersTempFolder()
         + File.separator + serverFullId))) {

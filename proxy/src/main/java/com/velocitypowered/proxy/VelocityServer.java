@@ -22,6 +22,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientOptions;
+import com.mongodb.MongoCredential;
+import com.mongodb.ServerAddress;
+import com.mongodb.client.MongoDatabase;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyReloadEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
@@ -63,6 +68,7 @@ import com.velocitypowered.proxy.util.ratelimit.Ratelimiter;
 import com.velocitypowered.proxy.util.ratelimit.Ratelimiters;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import fr.hygon.yokura.broker.handlers.Broker;
+import fr.hygon.yokura.commands.AdminCommand;
 import fr.hygon.yokura.servers.SendCommand;
 import fr.hygon.yokura.servers.ServerManager;
 import io.netty.bootstrap.Bootstrap;
@@ -104,6 +110,9 @@ import net.kyori.adventure.util.UTF8ResourceBundleControl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.asynchttpclient.AsyncHttpClient;
+import org.bson.BsonDocument;
+import org.bson.BsonString;
+import org.bson.Document;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -147,8 +156,10 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   private final VelocityEventManager eventManager;
   private final VelocityScheduler scheduler;
   private final VelocityChannelRegistrar channelRegistrar = new VelocityChannelRegistrar();
+  private MongoDatabase mongoDatabase;
   private final Broker broker = new Broker();
   private ServerManager serverManager;
+  private final ArrayList<UUID> administratorsUuid = new ArrayList<>();
 
   VelocityServer(final ProxyOptions options) {
     pluginManager = new VelocityPluginManager(this);
@@ -219,6 +230,21 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     new GlistCommand(this).register();
 
     this.doStartupConfigLoad();
+
+    Document document = mongoDatabase.getCollection("network")
+        .find(new BsonDocument("_id", new BsonString("velocity"))).limit(1).first();
+    if (document != null) {
+      document.getList("administrators", String.class).forEach(uuid -> administratorsUuid
+          .add(UUID.fromString(uuid)));
+    } else {
+      administratorsUuid.add(UUID.fromString("7ab1e3ff-a61c-46af-80f1-77a8b649f9e6")); // AmGone
+      mongoDatabase.getCollection("network").insertOne(new Document("_id", "velocity")
+          .append("administrators", administratorsUuid.stream()
+              .map(UUID::toString).collect(Collectors.toCollection(ArrayList::new))));
+    }
+
+    commandManager.register("admin", new AdminCommand(this));
+
 
     for (Map.Entry<String, String> entry : configuration.getServers().entrySet()) {
       servers.register(new ServerInfo(entry.getKey(), AddressUtil.parseAddress(entry.getValue())));
@@ -309,6 +335,23 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       commandManager.setAnnounceProxyCommands(configuration.isAnnounceProxyCommands());
     } catch (Exception e) {
       logger.error("Unable to read/load/save your velocity.toml. The server will shut down.", e);
+      LogManager.shutdown();
+      System.exit(1);
+    }
+
+    MongoCredential mongoCredential = MongoCredential.createCredential(configuration
+            .getYokuraConfig().getMongoUser(), configuration.getYokuraConfig().getMongoDatabase(),
+        configuration.getYokuraConfig().getMongoPassword());
+    MongoClient mongoClient = new MongoClient(new ServerAddress(configuration.getYokuraConfig()
+        .getMongoHost(), configuration.getYokuraConfig().getMongoPort()),
+        mongoCredential, MongoClientOptions.builder().build());
+    mongoDatabase = mongoClient.getDatabase(configuration.getYokuraConfig().getMongoDatabase());
+
+    try {
+      mongoClient.getDatabase("admin").runCommand(new Document("ping", 1));
+      logger.info("Connected to the MongoDB server.");
+    } catch (Exception exception) {
+      logger.error("Couldn't connect to the MongoDB server.", exception);
       LogManager.shutdown();
       System.exit(1);
     }
@@ -582,7 +625,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     return !(connectionsByName.containsKey(lowerName)
         || connectionsByUuid.containsKey(connection.getUniqueId()));
   }
-  
+
   /**
    * Attempts to register the {@code connection} with the proxy.
    * @param connection the connection to register
@@ -742,5 +785,13 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   @Override
   public ResourcePackInfo.Builder createResourcePackBuilder(String url) {
     return new VelocityResourcePackInfo.BuilderImpl(url);
+  }
+
+  public MongoDatabase getMongoDatabase() {
+    return mongoDatabase;
+  }
+
+  public ArrayList<UUID> getAdministratorsUuid() {
+    return administratorsUuid;
   }
 }

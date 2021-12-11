@@ -260,6 +260,11 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
         return CompletableFuture.completedFuture(null);
       }
 
+      if (!server.getAdministratorsUuid().contains(player.getUniqueId())) {
+        player.disconnect0(Component.text("Ce serveur est en développement."), true);
+        return CompletableFuture.completedFuture(null);
+      }
+
       logger.info("{} has connected", player);
 
       return server.getEventManager()
